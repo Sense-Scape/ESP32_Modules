@@ -1,0 +1,123 @@
+
+#ifndef WIFIMODULE
+#define WIFIMODULE
+
+#include <map>
+#include <cmath>
+#include <thread>
+#include <memory>
+
+#include "BaseModule.h"
+#include "TimeChunk.h"
+
+#include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/event_groups.h"
+#include "esp_system.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "esp_log.h"
+#include "nvs_flash.h"
+
+#include "lwip/err.h"
+#include "lwip/sockets.h"
+#include "lwip/sys.h"
+#include <lwip/netdb.h>
+
+#include "lwip/err.h"
+#include "lwip/sys.h"
+
+#define WIFI_CONNECTED_BIT BIT0
+#define WIFI_FAIL_BIT BIT1
+#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_PSK
+#define ESP_MAXIMUM_RETRY 3
+
+typedef struct WAVFile
+{
+    WAVHeader sWavHeader;
+    std::vector<float> vfWavData;
+
+} WAVEFile;
+
+
+/**
+ * @brief Module responsible for conversion to WAV structure and transmission of data to server
+ *
+ */
+class WifiModule : public BaseModule
+{
+private:
+    std::string m_sSSID;          ///< SSID of WiFi network
+    std::string m_sPassword;      ///< Password of WiFi network
+    std::string m_sHostIPAddress; ///< IP address of host
+    unsigned m_uUDPPort;          ///< UDP port that the ESP transmits to
+    int m_sock;
+    sockaddr_in m_dest_addr; ///> Destination IP address
+
+    /**
+     * @brief Transmit message using UDP to webserver
+     *
+     * @param pTimeChunk pointer to time data chunk
+     */
+    void SendUDP(std::shared_ptr<WAVEFile> psWAVFile);
+
+    /**
+     * @brief Connect to WiFi using module member parameters
+     *
+     */
+    void ConnectWifiConnection();
+
+    /**
+     * @brief Connect Wifi module to socket
+     *
+     */
+    void ConnectToSocket();
+
+    /**
+     * @brief Converts a TimeChunk to WAV file
+     *
+     * @param pTimeChunk smart pointer to TimeChunk
+     * @return WAVFile structure containing audio data
+     */
+    WAVFile ConvertTimeChunkToWAV(std::shared_ptr<TimeChunk> pTimeChunk);
+
+    /**
+     * @brief Converts a WAV header structure into a 44 uint8_t byte array
+     *
+     * @param sWAVHeader
+     * @param arr
+     */
+    void ConvertHeaderToByteArray(WAVHeader sWAVHeader, uint8_t *arr);
+
+    /**
+     * @brief The loop process the Wifi module completes
+     *
+     */
+    void Process(std::shared_ptr<BaseChunk> pBaseChunk) override;
+
+public:
+    static EventGroupHandle_t m_s_wifi_event_group; ///< Required by ESP-IDF
+    static const char *m_TAG;                       ///< Required by ESP-IDF
+    static int s_retry_num;                         ///< Required by ESP-IDF - connection retires before failure
+
+    /**
+     *
+     * @brief Construct a new Signal Processing Module object
+     *
+     */
+    WifiModule(std::string m_sSSID, std::string m_sPassword, std::string sHostIPAddress, unsigned uUDPport);
+    ~WifiModule(){};
+
+    /**
+     * @brief Wifi event handler function to control connection states
+     *
+     * @param arg
+     * @param event_base
+     * @param event_id
+     * @param event_data
+     */
+    static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+};
+
+#endif

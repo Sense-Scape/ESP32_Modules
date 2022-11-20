@@ -3,9 +3,12 @@
 # Min CMake version
 cmake_minimum_required(VERSION 3.20)
 
-idf_component_register(SRCS 
+idf_component_register(SRCS "WifiModule.cpp"
 						INCLUDE_DIRS "./include"
-						REQUIRES Chunk_Types Base_Module
+						REQUIRES 
+						wifi_provisioning 
+						Chunk_Types 
+						Base_Module
 						)
 
 
