@@ -107,7 +107,7 @@ public:
      *
      */
     WifiModule(std::string m_sSSID, std::string m_sPassword, std::string sHostIPAddress, unsigned uUDPport);
-    ~WifiModule(){};
+    //~WifiModule() = default;
 
     /**
      * @brief Wifi event handler function to control connection states
