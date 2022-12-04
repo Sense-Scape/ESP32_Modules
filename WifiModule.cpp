@@ -2,11 +2,12 @@
 
 // static const char *payload = "Message from ESP32 ";
 
-WifiModule::WifiModule(std::string sSSID, std::string sPassword, std::string sHostIPAddress, unsigned uUDPport) : BaseModule(),
-                                                                                                                  m_sSSID(sSSID),
-                                                                                                                  m_sPassword(sPassword),
-                                                                                                                  m_sHostIPAddress(sHostIPAddress),
-                                                                                                                  m_uUDPPort(uUDPport)
+WifiModule::WifiModule(std::string sSSID, std::string sPassword, std::string sHostIPAddress, unsigned uUDPport, unsigned uBufferSize) :
+BaseModule(uBufferSize),
+m_sSSID(sSSID),
+m_sPassword(sPassword),
+m_sHostIPAddress(sHostIPAddress),
+m_uUDPPort(uUDPport)
 {
     ConnectWifiConnection();
     ConnectToSocket();
@@ -14,22 +15,9 @@ WifiModule::WifiModule(std::string sSSID, std::string sPassword, std::string sHo
 
 void WifiModule::Process(std::shared_ptr<BaseChunk> pBaseChunk)
 {
-    while (true)
-    {
-        if (!m_cbBaseChunkBuffer.empty())
-        {
-
-            std::shared_ptr<TimeChunk> pTimeChunk = std::static_pointer_cast<TimeChunk>(m_cbBaseChunkBuffer.get());
-
-            // Converting to WAV then transmitting via UDP
-            SendUDP(std::make_shared<WAVFile>(ConvertTimeChunkToWAV(pTimeChunk)));
-        }
-        else
-        {
-            std::cout << std::string(__PRETTY_FUNCTION__) + ": Personal buffer empty, passing \n";
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-    }
+    std::shared_ptr<TimeChunk> pTimeChunk = std::static_pointer_cast<TimeChunk>(pBaseChunk);
+    // Converting to WAV then transmitting via UDP
+    SendUDP(std::make_shared<WAVFile>(ConvertTimeChunkToWAV(pTimeChunk)));
 }
 
 void WifiModule::ConnectWifiConnection()
@@ -153,7 +141,7 @@ void WifiModule::wifi_event_handler(void *arg, esp_event_base_t event_base,
 
 void WifiModule::SendUDP(std::shared_ptr<WAVEFile> psWAVFile)
 {
-
+    
     // Bytes to transmit is equal to number of bytes in WAV file
     uint32_t dTransmittableBytes = psWAVFile->sWavHeader.ChunkSize + 8 - 44;
     unsigned uSequenceNumber = 0; // sequence 0 indicated error, 1 is starting
@@ -162,7 +150,7 @@ void WifiModule::SendUDP(std::shared_ptr<WAVEFile> psWAVFile)
     uint8_t uTransmissionState = 0;    // 0 - error 1 - active transmission 2 - complete
     unsigned uDataBytesTransmitted = 0;
     unsigned uTransmissionSize = 0;
-    unsigned uMaxTranssionSize = 512; // bytes
+    unsigned uMaxTranssionSize = 256; // bytes
     bool bTransmit = true;
 
     while (bTransmit)
@@ -183,8 +171,9 @@ void WifiModule::SendUDP(std::shared_ptr<WAVEFile> psWAVFile)
             memcpy(&auUDPData[uDatagramHeaderSize], &auWAVHeader, sizeof(auWAVHeader));
 
             const void *ptr_payload(&(auUDPData));
+            vTaskDelay(1); //giving tiome for buffers to be process
             int err = sendto(m_sock, ptr_payload, sizeof(auUDPData), 0, (struct sockaddr *)&m_dest_addr, sizeof(m_dest_addr));
-
+            
             if (err < 0)
                 ESP_LOGE(m_TAG, "Error occurred during sending: errno %d ", errno);
             else
@@ -213,6 +202,7 @@ void WifiModule::SendUDP(std::shared_ptr<WAVEFile> psWAVFile)
             memcpy(&auUDPData[uDatagramHeaderSize], &(psWAVFile->vfWavData[uDataBytesTransmitted / 4]), uTransmissionSize - uDatagramHeaderSize);
 
             const void *ptr_payload(&(auUDPData));
+            vTaskDelay(1); //giving tiome for buffers to be processed
             int err = sendto(m_sock, ptr_payload, uTransmissionSize, 0, (struct sockaddr *)&m_dest_addr, sizeof(m_dest_addr));
 
             if (err < 0)

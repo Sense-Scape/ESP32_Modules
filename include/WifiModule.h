@@ -1,4 +1,3 @@
-
 #ifndef WIFIMODULE
 #define WIFIMODULE
 
@@ -47,13 +46,42 @@ typedef struct WAVFile
  */
 class WifiModule : public BaseModule
 {
+
+public:
+    static EventGroupHandle_t m_s_wifi_event_group; ///< Required by ESP-IDF
+    static const char *m_TAG;                       ///< Required by ESP-IDF
+    static int s_retry_num;                         ///< Required by ESP-IDF - connection retires before failure
+
+    /**
+     *
+     * @brief Construct a new Signal Processing Module object
+     * 
+     * @param[in] m_sSSID SSID of WiFi network
+     * @param[in] m_sPassword Password of WiFi network
+     * @param[in] sHostIPAddress IP address of target device
+     * @param[in] uUDPport Port over which to stream
+     * @param[in] uBufferSize Size of input buffer
+     */
+    WifiModule(std::string m_sSSID, std::string m_sPassword, std::string sHostIPAddress, unsigned uUDPport, unsigned uBufferSize);
+    //~WifiModule() = default;
+
+    /**
+     * @brief Wifi event handler function to control connection states
+     *
+     * @param arg
+     * @param event_base
+     * @param event_id
+     * @param event_data
+     */
+    static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
 private:
-    std::string m_sSSID;          ///< SSID of WiFi network
-    std::string m_sPassword;      ///< Password of WiFi network
-    std::string m_sHostIPAddress; ///< IP address of host
-    unsigned m_uUDPPort;          ///< UDP port that the ESP transmits to
-    int m_sock;
-    sockaddr_in m_dest_addr; ///> Destination IP address
+    std::string m_sSSID;            ///< SSID of WiFi network
+    std::string m_sPassword;        ///< Password of WiFi network
+    std::string m_sHostIPAddress;   ///< IP address of host
+    unsigned m_uUDPPort;            ///< UDP port that the ESP transmits to
+    int m_sock;                     ///< ESP Wifi Socket
+    sockaddr_in m_dest_addr;        ///> Destination IP address
 
     /**
      * @brief Transmit message using UDP to webserver
@@ -93,31 +121,9 @@ private:
     /**
      * @brief The loop process the Wifi module completes
      *
+     * @param[in] pBaseChunk pointer to base chunk
      */
     void Process(std::shared_ptr<BaseChunk> pBaseChunk) override;
-
-public:
-    static EventGroupHandle_t m_s_wifi_event_group; ///< Required by ESP-IDF
-    static const char *m_TAG;                       ///< Required by ESP-IDF
-    static int s_retry_num;                         ///< Required by ESP-IDF - connection retires before failure
-
-    /**
-     *
-     * @brief Construct a new Signal Processing Module object
-     *
-     */
-    WifiModule(std::string m_sSSID, std::string m_sPassword, std::string sHostIPAddress, unsigned uUDPport);
-    //~WifiModule() = default;
-
-    /**
-     * @brief Wifi event handler function to control connection states
-     *
-     * @param arg
-     * @param event_base
-     * @param event_id
-     * @param event_data
-     */
-    static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 };
 
 #endif
