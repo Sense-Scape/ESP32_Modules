@@ -4,6 +4,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 idf_component_register(SRCS "WifiModule.cpp"
+							"I2SModule.cpp"
 						INCLUDE_DIRS "./include"
 						REQUIRES 
 						wifi_provisioning 
