@@ -14,31 +14,38 @@ m_uNumChannels(uNumChannels)
 
 void I2SModule::ConfigureI2S()
 {
+    
+
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
         .sample_rate = m_uSampleRate,
-        .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
-        .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT, // Ground the L/R pin on the INMP441.
-        .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_STAND_I2S),
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT, // Ground the L/R pin on the INMP441.
+        .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_STAND_MSB),
         .intr_alloc_flags = 0,
         .dma_buf_count = 4,
-        .dma_buf_len = 256 * 4,
+        .dma_buf_len = 256 * 2,
         .use_apll = false,
         .tx_desc_auto_clear = false,
+        .fixed_mclk = false,
         };
-
     m_i2s_config_t = i2s_config;
 
-    
     if (ESP_OK != i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL)) {
         std::cout << std::string(__PRETTY_FUNCTION__) + "i2s_driver_install: error";
     }
 
+     if (m_pI2S_Queue == nullptr)
+    {
+        std::cout << std::string(__PRETTY_FUNCTION__) + "Failed to setup i2s event queue." << std::endl;;
+    }
+
+
     i2s_pin_config_t pin_config = {
-        .bck_io_num = 26,   // Bit Clock.
+        .bck_io_num = 32,   // Bit Clock.
         .ws_io_num = 25,    // Word Select aka left/right clock aka LRCL.
         .data_out_num = -1,
-        .data_in_num = 23,  // Data-out of the mic. (someone used 23 on forums).
+        .data_in_num = 33,  // Data-out of the mic. (someone used 23 on forums).
     };
 
     m_pin_config = pin_config;
@@ -56,36 +63,31 @@ void I2SModule::ConfigureI2S()
 
 void I2SModule::Process(std::shared_ptr<BaseChunk> pBaseChunk)
 {
+
+    size_t bytesRead = 0;
+    static uint16_t buffer16[256] = {0};
+
     while (true)
     {
 		// Creating simulated data
         ReinitializeTimeChunk();
-        
-        size_t bytesRead = 0;
-        uint8_t buffer32[256 * 4] = {0};
-        i2s_read(I2S_NUM_0, &buffer32, sizeof(buffer32), &bytesRead, 100);
 
-        int samplesRead = bytesRead / 4;
+        i2s_read(I2S_NUM_0, &buffer16, 2*256, &bytesRead, 100);
 
-
+        int samplesRead = bytesRead / 2;
         for (int i = 0; i < samplesRead; i++) 
         {
-            uint8_t mid = buffer32[i * 4 + 2];
-            uint8_t msb = buffer32[i * 4 + 3];
-            uint16_t raw = (((uint32_t)msb) << 8) + ((uint32_t)mid);
-            m_pTimeChunk->m_vvvdTimeChunk[0][0][i] = raw;
-            // memcpy(&buffer16[i], &raw, sizeof(raw)); // Copy so sign bits aren't interfered with somehow.
+            //buffer32[i];  //(buffer32[i] << 16) |  (buffer32[i+1] << 8) | buffer32[i+2];
+            //std::cout << std::to_string(buffer32[i]) << std::endl;
+            m_pTimeChunk->m_vvvfTimeChunk[0][0][i] = buffer16[i];//<XX*( 3.3 / (std::pow(2, 16) - 1)) - 3.3/2);
         }
 
-		// Passing data on
-		std::shared_ptr<TimeChunk> pTimeChunk = std::move(m_pTimeChunk);
-		if (!TryPassChunk(std::static_pointer_cast<BaseChunk>(pTimeChunk)))
-		{
-			std::cout << std::string(__PRETTY_FUNCTION__) + ": Next buffer full, dropping current chunk and passing \n";
-		}
-
-        // Sleeping for time equivalent to chunk period
-        std::cout << std::string(__PRETTY_FUNCTION__) + ": I2S chunk read and passed on \n";
+        // Passing data on
+        std::shared_ptr<TimeChunk> pTimeChunk = std::move(m_pTimeChunk);
+        if (!TryPassChunk(std::static_pointer_cast<BaseChunk>(pTimeChunk)))
+        {
+            std::cout << std::string(__PRETTY_FUNCTION__) + ": Next buffer full, dropping current chunk and passing \n";
+        }
 
         //TODO: Add a means to exit this in the case that this thread needs to be killed
     }
@@ -109,8 +111,8 @@ void I2SModule::ContinuouslyTryProcess()
 void I2SModule::ReinitializeTimeChunk()
 {
     m_pTimeChunk = std::make_shared<TimeChunk>(m_uChunkSize, m_uSampleRate, 0, 12, sizeof(float));
-    m_pTimeChunk->m_vvvdTimeChunk.resize(1);
-    m_pTimeChunk->m_vvvdTimeChunk[0].resize(m_uNumChannels);
+    m_pTimeChunk->m_vvvfTimeChunk.resize(1);
+    m_pTimeChunk->m_vvvfTimeChunk[0].resize(m_uNumChannels);
 
     unsigned uADCChannelCount = 0;
 
@@ -118,7 +120,7 @@ void I2SModule::ReinitializeTimeChunk()
     for (unsigned uADCChannel = 0; uADCChannel < m_uNumChannels; uADCChannel++)
     {
         // Initialising channel data vector for each ADC
-        m_pTimeChunk->m_vvvdTimeChunk[0][uADCChannel].resize(m_uChunkSize);
+        m_pTimeChunk->m_vvvfTimeChunk[0][uADCChannel].resize(m_uChunkSize);
         uADCChannelCount++;
     }
 

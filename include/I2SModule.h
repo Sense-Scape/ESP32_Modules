@@ -51,7 +51,7 @@ private:
     unsigned m_uChunkSize;                      ///< Single channel chunk size
     unsigned m_uNumChannels;                    ///< Number of audio channels to sample
     std::shared_ptr<TimeChunk> m_pTimeChunk;    ///< Pointer to member time data chunk
-    
+    QueueHandle_t m_pI2S_Queue;
     
     /**
      * 

@@ -11,6 +11,7 @@ m_uUDPPort(uUDPport)
 {
     ConnectWifiConnection();
     ConnectToSocket();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 }
 
 void WifiModule::Process(std::shared_ptr<BaseChunk> pBaseChunk)
@@ -150,7 +151,7 @@ void WifiModule::SendUDP(std::shared_ptr<WAVEFile> psWAVFile)
     uint8_t uTransmissionState = 0;    // 0 - error 1 - active transmission 2 - complete
     unsigned uDataBytesTransmitted = 0;
     unsigned uTransmissionSize = 0;
-    unsigned uMaxTranssionSize = 256; // bytes
+    unsigned uMaxTranssionSize = 512; // bytes
     bool bTransmit = true;
 
     while (bTransmit)
@@ -171,13 +172,10 @@ void WifiModule::SendUDP(std::shared_ptr<WAVEFile> psWAVFile)
             memcpy(&auUDPData[uDatagramHeaderSize], &auWAVHeader, sizeof(auWAVHeader));
 
             const void *ptr_payload(&(auUDPData));
-            vTaskDelay(1); //giving tiome for buffers to be process
             int err = sendto(m_sock, ptr_payload, sizeof(auUDPData), 0, (struct sockaddr *)&m_dest_addr, sizeof(m_dest_addr));
             
             if (err < 0)
                 ESP_LOGE(m_TAG, "Error occurred during sending: errno %d ", errno);
-            else
-                ESP_LOGE(m_TAG, "UDP message sent");
 
             // sBytesTransmitted = sBytesTransmitted + uTransmissionSize - uDatagramHeaderSize;
             uSequenceNumber++;
@@ -202,13 +200,10 @@ void WifiModule::SendUDP(std::shared_ptr<WAVEFile> psWAVFile)
             memcpy(&auUDPData[uDatagramHeaderSize], &(psWAVFile->vfWavData[uDataBytesTransmitted / 4]), uTransmissionSize - uDatagramHeaderSize);
 
             const void *ptr_payload(&(auUDPData));
-            vTaskDelay(1); //giving tiome for buffers to be processed
             int err = sendto(m_sock, ptr_payload, uTransmissionSize, 0, (struct sockaddr *)&m_dest_addr, sizeof(m_dest_addr));
 
             if (err < 0)
                 ESP_LOGE(m_TAG, "Error occurred during sending: errno %d ", errno);
-            else
-                ESP_LOGE(m_TAG, "UDP message sent");
 
             uDataBytesTransmitted = uDataBytesTransmitted + uTransmissionSize - uDatagramHeaderSize;
             uSequenceNumber++;
@@ -227,7 +222,7 @@ WAVFile WifiModule::ConvertTimeChunkToWAV(std::shared_ptr<TimeChunk> pTimeChunk)
     sWavFile.sWavHeader.SamplesPerSec = pTimeChunk->m_dSampleRate;
     sWavFile.sWavHeader.NumOfChan = pTimeChunk->m_uNumChannels;
     sWavFile.sWavHeader.bitsPerSample = pTimeChunk->m_uNumBytes * 8;
-    sWavFile.sWavHeader.SamplesPerSec = pTimeChunk->m_dSampleRate * pTimeChunk->m_uNumChannels * pTimeChunk->m_uNumBytes / 8;
+    sWavFile.sWavHeader.SamplesPerSec = pTimeChunk->m_dSampleRate;
     sWavFile.sWavHeader.blockAlign = 4; // stereo?
     // Setting chunk Sizes
     sWavFile.sWavHeader.Subchunk2Size = pTimeChunk->m_uNumChannels * pTimeChunk->m_dChunkSize * pTimeChunk->m_uNumBytes;
@@ -236,7 +231,7 @@ WAVFile WifiModule::ConvertTimeChunkToWAV(std::shared_ptr<TimeChunk> pTimeChunk)
     for (unsigned uSampleIndex = 0; uSampleIndex < pTimeChunk->m_dChunkSize; uSampleIndex++)
     {
         // Iterating through each ADC
-        for (auto vADCData = pTimeChunk->m_vvvdTimeChunk.begin(); vADCData != pTimeChunk->m_vvvdTimeChunk.end(); ++vADCData)
+        for (auto vADCData = pTimeChunk->m_vvvfTimeChunk.begin(); vADCData != pTimeChunk->m_vvvfTimeChunk.end(); ++vADCData)
         {
             // Iterating through each indivuidal ADC Channel
             for (auto vADCChannelData = vADCData->begin(); vADCChannelData != vADCData->end(); ++vADCChannelData)
