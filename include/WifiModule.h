@@ -85,27 +85,23 @@ private:
 
     /**
      * @brief Transmit message using UDP to webserver
-     *
-     * @param pTimeChunk pointer to time data chunk
+     * @param pBaseChunk pointer to base chunk
      */
-    void SendUDP(std::shared_ptr<WAVEFile> psWAVFile);
+    void SendUDP(std::shared_ptr<BaseChunk> pBaseChunk);
 
     /**
      * @brief Connect to WiFi using module member parameters
-     *
      */
     void ConnectWifiConnection();
 
     /**
      * @brief Connect Wifi module to socket
-     *
      */
     void ConnectToSocket();
 
     /**
      * @brief Converts a TimeChunk to WAV file
-     *
-     * @param pTimeChunk smart pointer to TimeChunk
+     * @param[in] pTimeChunk smart pointer to TimeChunk
      * @return WAVFile structure containing audio data
      */
     WAVFile ConvertTimeChunkToWAV(std::shared_ptr<TimeChunk> pTimeChunk);

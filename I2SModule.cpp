@@ -6,10 +6,8 @@ m_uSampleRate(uSampleRate),
 m_uChunkSize(uChunkSize),
 m_uNumChannels(uNumChannels)
 {
-
     ReinitializeTimeChunk();
     ConfigureI2S();
-
 }
 
 void I2SModule::ConfigureI2S()
@@ -79,16 +77,16 @@ void I2SModule::Process(std::shared_ptr<BaseChunk> pBaseChunk)
         {
             //buffer32[i];  //(buffer32[i] << 16) |  (buffer32[i+1] << 8) | buffer32[i+2];
             //std::cout << std::to_string(buffer32[i]) << std::endl;
-            m_pTimeChunk->m_vvvfTimeChunk[0][0][i] = buffer16[i];//<XX*( 3.3 / (std::pow(2, 16) - 1)) - 3.3/2);
+            m_pTimeChunk->m_vvfTimeChunks[0][i] = buffer16[i];//<XX*( 3.3 / (std::pow(2, 16) - 1)) - 3.3/2);
         }
 
         // Passing data on
-        std::shared_ptr<TimeChunk> pTimeChunk = std::move(m_pTimeChunk);
-        if (!TryPassChunk(std::static_pointer_cast<BaseChunk>(pTimeChunk)))
+        std::shared_ptr<TimeChunk> pTimeChunk = m_pTimeChunk;
+        if (!TryPassChunk(pTimeChunk))
         {
             std::cout << std::string(__PRETTY_FUNCTION__) + ": Next buffer full, dropping current chunk and passing \n";
         }
-
+        
         //TODO: Add a means to exit this in the case that this thread needs to be killed
     }
 
@@ -110,9 +108,8 @@ void I2SModule::ContinuouslyTryProcess()
 
 void I2SModule::ReinitializeTimeChunk()
 {
-    m_pTimeChunk = std::make_shared<TimeChunk>(m_uChunkSize, m_uSampleRate, 0, 12, sizeof(float));
-    m_pTimeChunk->m_vvvfTimeChunk.resize(1);
-    m_pTimeChunk->m_vvvfTimeChunk[0].resize(m_uNumChannels);
+    m_pTimeChunk = std::make_shared<TimeChunk>(m_uChunkSize, m_uSampleRate, 0, 12, sizeof(float), 1);
+    m_pTimeChunk->m_vvfTimeChunks.resize(m_uNumChannels);
 
     unsigned uADCChannelCount = 0;
 
@@ -120,7 +117,7 @@ void I2SModule::ReinitializeTimeChunk()
     for (unsigned uADCChannel = 0; uADCChannel < m_uNumChannels; uADCChannel++)
     {
         // Initialising channel data vector for each ADC
-        m_pTimeChunk->m_vvvfTimeChunk[0][uADCChannel].resize(m_uChunkSize);
+        m_pTimeChunk->m_vvfTimeChunks[uADCChannel].resize(m_uChunkSize);
         uADCChannelCount++;
     }
 

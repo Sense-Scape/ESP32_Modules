@@ -16,9 +16,7 @@ m_uUDPPort(uUDPport)
 
 void WifiModule::Process(std::shared_ptr<BaseChunk> pBaseChunk)
 {
-    std::shared_ptr<TimeChunk> pTimeChunk = std::static_pointer_cast<TimeChunk>(pBaseChunk);
-    // Converting to WAV then transmitting via UDP
-    SendUDP(std::make_shared<WAVFile>(ConvertTimeChunkToWAV(pTimeChunk)));
+    SendUDP(pBaseChunk);
 }
 
 void WifiModule::ConnectWifiConnection()
@@ -140,13 +138,16 @@ void WifiModule::wifi_event_handler(void *arg, esp_event_base_t event_base,
     }
 }
 
-void WifiModule::SendUDP(std::shared_ptr<WAVEFile> psWAVFile)
+void WifiModule::SendUDP(std::shared_ptr<BaseChunk> pBaseChunk)
 {
-    
-    // Bytes to transmit is equal to number of bytes in WAV file
-    uint32_t dTransmittableBytes = psWAVFile->sWavHeader.ChunkSize + 8 - 44;
+    // Serialising chunk to bytes
+    auto pvcByteData = pBaseChunk->Serialise();
+
+    // Bytes to transmit is equal to number of bytes in derived object (e.g TimeChunk)
+    uint32_t dTransmittableBytes = pvcByteData->size();
+
+    // Transmission state vartiables
     unsigned uSequenceNumber = 0; // sequence 0 indicated error, 1 is starting
-    unsigned uWAVHeaderSize = 44;
     unsigned uDatagramHeaderSize = 16; // NEEDS TO RESULT IN DATA WITH MULTIPLE OF 4 BYTES
     uint8_t uTransmissionState = 0;    // 0 - error 1 - active transmission 2 - complete
     unsigned uDataBytesTransmitted = 0;
@@ -154,60 +155,41 @@ void WifiModule::SendUDP(std::shared_ptr<WAVEFile> psWAVFile)
     unsigned uMaxTranssionSize = 512; // bytes
     bool bTransmit = true;
 
+    // Logic for transimission
     while (bTransmit)
     {
-
-        if (uSequenceNumber == 0)
+        // If not enough bytes for a full transmission
+        if (uDataBytesTransmitted + uTransmissionSize - uDatagramHeaderSize > dTransmittableBytes)
         {
-            uTransmissionSize = uDatagramHeaderSize + uWAVHeaderSize;
-
-            uint8_t auUDPData[uTransmissionSize] = {(uint8_t)0};
-            uint8_t auWAVHeader[44] = {(uint8_t)0};
-            ConvertHeaderToByteArray(psWAVFile->sWavHeader, auWAVHeader);
-
-            // Filling for data to be transmitted
-            memcpy(&auUDPData[0], &uSequenceNumber, sizeof(uSequenceNumber)); // 4 bytes
-            memcpy(&auUDPData[4], &uTransmissionState, sizeof(uTransmissionState));
-            memcpy(&auUDPData[5], &uTransmissionSize, sizeof(uTransmissionSize));
-            memcpy(&auUDPData[uDatagramHeaderSize], &auWAVHeader, sizeof(auWAVHeader));
-
-            const void *ptr_payload(&(auUDPData));
-            int err = sendto(m_sock, ptr_payload, sizeof(auUDPData), 0, (struct sockaddr *)&m_dest_addr, sizeof(m_dest_addr));
-            
-            if (err < 0)
-                ESP_LOGE(m_TAG, "Error occurred during sending: errno %d ", errno);
-
-            // sBytesTransmitted = sBytesTransmitted + uTransmissionSize - uDatagramHeaderSize;
-            uSequenceNumber++;
+            uTransmissionSize = dTransmittableBytes - uDataBytesTransmitted + uDatagramHeaderSize;
+            uTransmissionState = 1;
+            bTransmit = false;
         }
         else
         {
-            // Checking if need to adjust last transmission size
-            if (uDataBytesTransmitted + uTransmissionSize - uDatagramHeaderSize > dTransmittableBytes)
-            {
-                uTransmissionSize = dTransmittableBytes - uDataBytesTransmitted + uDatagramHeaderSize;
-                uTransmissionState = 1;
-                bTransmit = false;
-            }
-            else
-                uTransmissionSize = uMaxTranssionSize;
-
-            uint8_t auUDPData[uTransmissionSize] = {(uint8_t)0};
-
-            memcpy(&auUDPData[0], &uSequenceNumber, sizeof(uSequenceNumber)); // 4 bytes
-            memcpy(&auUDPData[4], &uTransmissionState, sizeof(uTransmissionState));
-            memcpy(&auUDPData[5], &uTransmissionSize, sizeof(uTransmissionSize));
-            memcpy(&auUDPData[uDatagramHeaderSize], &(psWAVFile->vfWavData[uDataBytesTransmitted / 4]), uTransmissionSize - uDatagramHeaderSize);
-
-            const void *ptr_payload(&(auUDPData));
-            int err = sendto(m_sock, ptr_payload, uTransmissionSize, 0, (struct sockaddr *)&m_dest_addr, sizeof(m_dest_addr));
-
-            if (err < 0)
-                ESP_LOGE(m_TAG, "Error occurred during sending: errno %d ", errno);
-
-            uDataBytesTransmitted = uDataBytesTransmitted + uTransmissionSize - uDatagramHeaderSize;
-            uSequenceNumber++;
+            uTransmissionSize = uMaxTranssionSize;
         }
+
+        // UDP transmission state control
+        uint8_t auUDPData[uTransmissionSize] = {(uint8_t)0};
+        memcpy(&auUDPData[0], &uSequenceNumber, sizeof(uSequenceNumber)); // 4 bytes
+        memcpy(&auUDPData[4], &uTransmissionState, sizeof(uTransmissionState));
+        memcpy(&auUDPData[5], &uTransmissionSize, sizeof(uTransmissionSize));
+
+        // Actual Byte data to transmit
+        //std::cout << std::to_string(uDataBytesTransmitted) + " ---- " + std::to_string(uTransmissionSize) << std::endl;
+        memcpy(&auUDPData[uDatagramHeaderSize], &((*pvcByteData)[uDataBytesTransmitted]), uTransmissionSize - uDatagramHeaderSize);
+
+        const void *ptr_payload(&(auUDPData));
+        int err = sendto(m_sock, ptr_payload, uTransmissionSize, 0, (struct sockaddr *)&m_dest_addr, sizeof(m_dest_addr));
+
+        // Only print if there was a TX error
+        if (err < 0)
+            ESP_LOGE(m_TAG, "Error occurred during sending: errno %d ", errno);
+
+        // Updating transmission states
+        uDataBytesTransmitted = uDataBytesTransmitted + uTransmissionSize - uDatagramHeaderSize;
+        uSequenceNumber++;
     }
 }
 
@@ -230,15 +212,11 @@ WAVFile WifiModule::ConvertTimeChunkToWAV(std::shared_ptr<TimeChunk> pTimeChunk)
 
     for (unsigned uSampleIndex = 0; uSampleIndex < pTimeChunk->m_dChunkSize; uSampleIndex++)
     {
-        // Iterating through each ADC
-        for (auto vADCData = pTimeChunk->m_vvvfTimeChunk.begin(); vADCData != pTimeChunk->m_vvvfTimeChunk.end(); ++vADCData)
+        // Iterating through each audio channel
+        for (auto vADCChannelData = pTimeChunk->m_vvfTimeChunks.begin(); vADCChannelData != pTimeChunk->m_vvfTimeChunks.end(); ++vADCChannelData)
         {
-            // Iterating through each indivuidal ADC Channel
-            for (auto vADCChannelData = vADCData->begin(); vADCChannelData != vADCData->end(); ++vADCChannelData)
-            {
-                // Pushing audio data onto wav data vector
-                sWavFile.vfWavData.push_back((*vADCChannelData)[uSampleIndex]);
-            }
+            // Pushing audio data onto wav data vector
+            sWavFile.vfWavData.push_back((*vADCChannelData)[uSampleIndex]);
         }
     }
 
