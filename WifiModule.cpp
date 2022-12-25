@@ -2,12 +2,13 @@
 
 // static const char *payload = "Message from ESP32 ";
 
-WifiModule::WifiModule(std::string sSSID, std::string sPassword, std::string sHostIPAddress, unsigned uUDPport, unsigned uBufferSize) :
+WifiModule::WifiModule(std::string sSSID, std::string sPassword, std::string sHostIPAddress, unsigned uUDPport, unsigned uDatagramSize,unsigned uBufferSize) :
 BaseModule(uBufferSize),
 m_sSSID(sSSID),
 m_sPassword(sPassword),
 m_sHostIPAddress(sHostIPAddress),
-m_uUDPPort(uUDPport)
+m_uUDPPort(uUDPport),
+m_uDatagramSize(uDatagramSize)
 {
     ConnectWifiConnection();
     ConnectToSocket();
@@ -152,7 +153,7 @@ void WifiModule::SendUDP(std::shared_ptr<BaseChunk> pBaseChunk)
     uint8_t uTransmissionState = 0;    // 0 - error 1 - active transmission 2 - complete
     unsigned uDataBytesTransmitted = 0;
     unsigned uTransmissionSize = 0;
-    unsigned uMaxTranssionSize = 512; // bytes
+    unsigned uMaxTranssionSize = m_uDatagramSize; // bytes
     bool bTransmit = true;
 
     // Logic for transimission
