@@ -160,7 +160,7 @@ void WifiModule::SendUDP(std::shared_ptr<BaseChunk> pBaseChunk)
     while (bTransmit)
     {
         // If not enough bytes for a full transmission
-        if (uDataBytesTransmitted + uTransmissionSize - uDatagramHeaderSize > dTransmittableBytes)
+        if (uDataBytesTransmitted + uTransmissionSize > dTransmittableBytes)
         {
             uTransmissionSize = dTransmittableBytes - uDataBytesTransmitted + uDatagramHeaderSize;
             uTransmissionState = 1;
@@ -178,7 +178,6 @@ void WifiModule::SendUDP(std::shared_ptr<BaseChunk> pBaseChunk)
         memcpy(&auUDPData[5], &uTransmissionSize, sizeof(uTransmissionSize));
 
         // Actual Byte data to transmit
-        //std::cout << std::to_string(uDataBytesTransmitted) + " ---- " + std::to_string(uTransmissionSize) << std::endl;
         memcpy(&auUDPData[uDatagramHeaderSize], &((*pvcByteData)[uDataBytesTransmitted]), uTransmissionSize - uDatagramHeaderSize);
 
         const void *ptr_payload(&(auUDPData));
