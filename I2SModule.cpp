@@ -81,7 +81,8 @@ void I2SModule::Process(std::shared_ptr<BaseChunk> pBaseChunk)
         }
 
         // Passing data on
-        std::shared_ptr<TimeChunk> pTimeChunk = m_pTimeChunk;
+        std::shared_ptr<TimeChunk> pTimeChunk = std::move(m_pTimeChunk);
+
         if (!TryPassChunk(pTimeChunk))
         {
             std::cout << std::string(__PRETTY_FUNCTION__) + ": Next buffer full, dropping current chunk and passing \n";
