@@ -8,7 +8,8 @@ m_sSSID(sSSID),
 m_sPassword(sPassword),
 m_sHostIPAddress(sHostIPAddress),
 m_uUDPPort(uUDPport),
-m_uDatagramSize(uDatagramSize)
+m_uDatagramSize(uDatagramSize),
+m_uSessionNumber(0)
 {
     ConnectWifiConnection();
     ConnectToSocket();
@@ -143,24 +144,26 @@ void WifiModule::SendUDP(std::shared_ptr<BaseChunk> pBaseChunk)
 {
     // Serialising chunk to bytes
     auto pvcByteData = pBaseChunk->Serialise();
-
+    
     // Bytes to transmit is equal to number of bytes in derived object (e.g TimeChunk)
     uint32_t dTransmittableBytes = pvcByteData->size();
 
-    // Transmission state vartiables
+    // Transmission state vartiables - This is essentially TCP now
     unsigned uSequenceNumber = 0; // sequence 0 indicated error, 1 is starting
-    unsigned uDatagramHeaderSize = 16; // NEEDS TO RESULT IN DATA WITH MULTIPLE OF 4 BYTES
+    unsigned uDatagramHeaderSize = 24; // NEEDS TO RESULT IN DATA WITH MULTIPLE OF 4 BYTES
     uint8_t uTransmissionState = 0;    // 0 - error 1 - active transmission 2 - complete
     unsigned uDataBytesTransmitted = 0;
-    unsigned uTransmissionSize = 0;
+    unsigned uSessionNumber = m_uSessionNumber;
+    unsigned uTransmissionSize = m_uDatagramSize;
     unsigned uMaxTranssionSize = m_uDatagramSize; // bytes
+    uint32_t u32ChunkType = ChunkTypesUtility::toU32(pBaseChunk->GetChunkType());
     bool bTransmit = true;
 
     // Logic for transimission
     while (bTransmit)
     {
         // If not enough bytes for a full transmission
-        if (uDataBytesTransmitted + uTransmissionSize - uDatagramHeaderSize > dTransmittableBytes)
+        if (uDataBytesTransmitted + uTransmissionSize - uDatagramHeaderSize> dTransmittableBytes)
         {
             uTransmissionSize = dTransmittableBytes - uDataBytesTransmitted + uDatagramHeaderSize;
             uTransmissionState = 1;
@@ -176,9 +179,12 @@ void WifiModule::SendUDP(std::shared_ptr<BaseChunk> pBaseChunk)
         memcpy(&auUDPData[0], &uSequenceNumber, sizeof(uSequenceNumber)); // 4 bytes
         memcpy(&auUDPData[4], &uTransmissionState, sizeof(uTransmissionState));
         memcpy(&auUDPData[5], &uTransmissionSize, sizeof(uTransmissionSize));
+        memcpy(&auUDPData[9], &u32ChunkType, sizeof(u32ChunkType));
+        memcpy(&auUDPData[13], &uSessionNumber, sizeof(uSessionNumber));
+
+        //TODO: implement IP tx to uniquley identify device
 
         // Actual Byte data to transmit
-        //std::cout << std::to_string(uDataBytesTransmitted) + " ---- " + std::to_string(uTransmissionSize) << std::endl;
         memcpy(&auUDPData[uDatagramHeaderSize], &((*pvcByteData)[uDataBytesTransmitted]), uTransmissionSize - uDatagramHeaderSize);
 
         const void *ptr_payload(&(auUDPData));
@@ -191,52 +197,8 @@ void WifiModule::SendUDP(std::shared_ptr<BaseChunk> pBaseChunk)
         // Updating transmission states
         uDataBytesTransmitted = uDataBytesTransmitted + uTransmissionSize - uDatagramHeaderSize;
         uSequenceNumber++;
-    }
-}
-
-WAVFile WifiModule::ConvertTimeChunkToWAV(std::shared_ptr<TimeChunk> pTimeChunk)
-{
-
-    WAVFile sWavFile;
-
-    // Creating WAV header
-    // RIFF, WAVE, FMT, Subchunk2ID
-    // Setting header parameters
-    sWavFile.sWavHeader.SamplesPerSec = pTimeChunk->m_dSampleRate;
-    sWavFile.sWavHeader.NumOfChan = pTimeChunk->m_uNumChannels;
-    sWavFile.sWavHeader.bitsPerSample = pTimeChunk->m_uNumBytes * 8;
-    sWavFile.sWavHeader.SamplesPerSec = pTimeChunk->m_dSampleRate;
-    sWavFile.sWavHeader.blockAlign = 4; // stereo?
-    // Setting chunk Sizes
-    sWavFile.sWavHeader.Subchunk2Size = pTimeChunk->m_uNumChannels * pTimeChunk->m_dChunkSize * pTimeChunk->m_uNumBytes;
-    sWavFile.sWavHeader.ChunkSize = sWavFile.sWavHeader.Subchunk2Size + 44 - 8;
-
-    for (unsigned uSampleIndex = 0; uSampleIndex < pTimeChunk->m_dChunkSize; uSampleIndex++)
-    {
-        // Iterating through each audio channel
-        for (auto vADCChannelData = pTimeChunk->m_vvfTimeChunks.begin(); vADCChannelData != pTimeChunk->m_vvfTimeChunks.end(); ++vADCChannelData)
-        {
-            // Pushing audio data onto wav data vector
-            sWavFile.vfWavData.push_back((*vADCChannelData)[uSampleIndex]);
-        }
+        
     }
 
-    return sWavFile;
-}
-
-void WifiModule::ConvertHeaderToByteArray(WAVHeader sWAVHeader, uint8_t *arr)
-{
-    std::memcpy(&arr[0], &sWAVHeader.RIFF, sizeof(sWAVHeader.RIFF));                    // 0-3
-    std::memcpy(&arr[4], &sWAVHeader.ChunkSize, sizeof(sWAVHeader.ChunkSize));          // 4-7
-    std::memcpy(&arr[8], &sWAVHeader.WAVE, sizeof(sWAVHeader.WAVE));                    // 8-11
-    std::memcpy(&arr[12], &sWAVHeader.fmt, sizeof(sWAVHeader.fmt));                     // 12-15
-    std::memcpy(&arr[16], &sWAVHeader.Subchunk1Size, sizeof(sWAVHeader.Subchunk1Size)); // 16-19
-    std::memcpy(&arr[20], &sWAVHeader.AudioFormat, sizeof(sWAVHeader.AudioFormat));     // 20-21
-    std::memcpy(&arr[22], &sWAVHeader.NumOfChan, sizeof(sWAVHeader.NumOfChan));         // 22-23
-    std::memcpy(&arr[24], &sWAVHeader.SamplesPerSec, sizeof(sWAVHeader.SamplesPerSec)); // 24-27
-    std::memcpy(&arr[28], &sWAVHeader.bytesPerSec, sizeof(sWAVHeader.bytesPerSec));     // 28-31
-    std::memcpy(&arr[32], &sWAVHeader.blockAlign, sizeof(sWAVHeader.blockAlign));       // 32-33
-    std::memcpy(&arr[34], &sWAVHeader.bitsPerSample, sizeof(sWAVHeader.bitsPerSample)); // 34-35
-    std::memcpy(&arr[36], &sWAVHeader.Subchunk2ID, sizeof(sWAVHeader.Subchunk2ID));     // 36-40
-    std::memcpy(&arr[41], &sWAVHeader.Subchunk2Size, sizeof(sWAVHeader.Subchunk2Size)); // 41-44
+    m_uSessionNumber++;
 }

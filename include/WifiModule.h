@@ -84,6 +84,7 @@ private:
     int m_sock;                     ///< ESP Wifi Socket
     sockaddr_in m_dest_addr;        ///> Destination IP address
     unsigned m_uDatagramSize;       ///> Datagram transmission size in bytes
+    unsigned m_uSessionNumber; 
 
     /**
      * @brief Transmit message using UDP to webserver
