@@ -36,28 +36,23 @@
 
 typedef struct WAVFile
 {
-    WAVHeader sWavHeader;
-    std::vector<float> vfWavData;
-
+    WAVHeader sWavHeader;           ///< WAV header
+    std::vector<float> vfWavData;   ///< Multi channel packed WAV data
 } WAVEFile;
 
 
 /**
  * @brief Module responsible for conversion to WAV structure and transmission of data to server
- *
  */
 class WifiModule : public BaseModule
 {
-
 public:
     static EventGroupHandle_t m_s_wifi_event_group; ///< Required by ESP-IDF
     static const char *m_TAG;                       ///< Required by ESP-IDF
     static int s_retry_num;                         ///< Required by ESP-IDF - connection retires before failure
 
     /**
-     *
      * @brief Construct a new Signal Processing Module object
-     * 
      * @param[in] m_sSSID SSID of WiFi network
      * @param[in] m_sPassword Password of WiFi network
      * @param[in] sHostIPAddress IP address of target device
@@ -70,7 +65,6 @@ public:
 
     /**
      * @brief Wifi event handler function to control connection states
-     *
      * @param arg
      * @param event_base
      * @param event_id
@@ -106,7 +100,6 @@ private:
 
     /**
      * @brief The loop process the Wifi module completes
-     *
      * @param[in] pBaseChunk pointer to base chunk
      */
     void Process(std::shared_ptr<BaseChunk> pBaseChunk) override;
