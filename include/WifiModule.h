@@ -105,21 +105,6 @@ private:
     void ConnectToSocket();
 
     /**
-     * @brief Converts a TimeChunk to WAV file
-     * @param[in] pTimeChunk smart pointer to TimeChunk
-     * @return WAVFile structure containing audio data
-     */
-    WAVFile ConvertTimeChunkToWAV(std::shared_ptr<TimeChunk> pTimeChunk);
-
-    /**
-     * @brief Converts a WAV header structure into a 44 uint8_t byte array
-     *
-     * @param sWAVHeader
-     * @param arr
-     */
-    void ConvertHeaderToByteArray(WAVHeader sWAVHeader, uint8_t *arr);
-
-    /**
      * @brief The loop process the Wifi module completes
      *
      * @param[in] pBaseChunk pointer to base chunk
