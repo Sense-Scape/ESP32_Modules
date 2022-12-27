@@ -34,13 +34,6 @@
 #define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_PSK
 #define ESP_MAXIMUM_RETRY 3
 
-typedef struct WAVFile
-{
-    WAVHeader sWavHeader;           ///< WAV header
-    std::vector<float> vfWavData;   ///< Multi channel packed WAV data
-} WAVEFile;
-
-
 /**
  * @brief Module responsible for conversion to WAV structure and transmission of data to server
  */
