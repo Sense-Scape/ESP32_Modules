@@ -61,7 +61,7 @@ public:
 private:
     I2SModuleConfig m_sI2SModuleConfig;                         ///< I2SModuleConfig structure used to configure the IS2 module
     i2s_config_t m_i2s_config_t;                ///< ESP32 I2S config structure
-    i2s_pin_config_t m_pin_config;
+    std::vector<i2s_pin_config_t> m_v_pin_config;
     std::shared_ptr<TimeChunk> m_pTimeChunk;    ///< Pointer to member time data chunk
     
     /**
