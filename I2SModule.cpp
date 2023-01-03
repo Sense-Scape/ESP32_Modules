@@ -13,15 +13,15 @@ void I2SModule::ConfigureI2S()
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
         .sample_rate = m_sI2SModuleConfig.m_uSampleRate,
-        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
-        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT, // Ground the L/R pin on the INMP441.
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
+        .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT, // Ground the L/R pin on the INMP441.
         .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_STAND_MSB),
-        .intr_alloc_flags = 0,
+        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
         .dma_buf_count = 4,
-        .dma_buf_len = 256 * 2,
+        .dma_buf_len = 256 * 4,
         .use_apll = false,
         .tx_desc_auto_clear = false,
-        .fixed_mclk = false,
+        .fixed_mclk = 0,
         };
     m_i2s_config_t = i2s_config;
 
@@ -58,24 +58,28 @@ void I2SModule::Process(std::shared_ptr<BaseChunk> pBaseChunk)
 {
 
     size_t bytesRead = 0;
-    static uint16_t buffer16[256] = {0};
+    static uint8_t buffer16[256*4] = {0};
     std::unique_lock<std::mutex> ProcessLock(m_ProcessStateMutex);
     
     while (!m_bShutDown)
     {
         ProcessLock.unlock();
-		// Getting I2S Data
         ReinitializeTimeChunk();
     
         for (unsigned uI2SInterfaceIndex = 0; uI2SInterfaceIndex < m_sI2SModuleConfig.m_vI2SPinConfig.size(); uI2SInterfaceIndex++)
         {   
-            i2s_read((i2s_port_t)uI2SInterfaceIndex, &buffer16, 2*256, &bytesRead, 100);
+            i2s_read((i2s_port_t)uI2SInterfaceIndex, &buffer16, 4*256, &bytesRead, 100);
 
             // Storing samples
-            int samplesRead = bytesRead / 2;
+            int samplesRead = bytesRead / 4;
+            
             for (int i = 0; i < samplesRead; i++) 
-               m_pTimeChunk->m_vvfTimeChunks[uI2SInterfaceIndex][i] = buffer16[i]; // WARNING: I2S interface will change if not 1 mic per channel
-        }        
+            {
+                m_pTimeChunk->m_vvfTimeChunks[uI2SInterfaceIndex][i] = ((buffer16[4*i+2] << 8) | (buffer16[4*i+3]));
+            }
+                // WARNING: I2S interface will change if not 1 mic per channel
+        }
+        
         
         // Passing data on
         std::shared_ptr<TimeChunk> pTimeChunk = std::move(m_pTimeChunk);
