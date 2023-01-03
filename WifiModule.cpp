@@ -13,7 +13,7 @@ m_uSessionNumber(0)
 {
     ConnectWifiConnection();
     ConnectToSocket();
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 }
 
 void WifiModule::Process(std::shared_ptr<BaseChunk> pBaseChunk)
@@ -192,8 +192,12 @@ void WifiModule::SendUDP(std::shared_ptr<BaseChunk> pBaseChunk)
 
         // Only print if there was a TX error
         if (err < 0)
+        {
             ESP_LOGE(m_TAG, "Error occurred during sending: errno %d ", errno);
-
+            if(errno == 118)
+                esp_restart(); //TODO: Complete proper handling of incorrect TX
+        }
+           
         // Updating transmission states
         uDataBytesTransmitted = uDataBytesTransmitted + uTransmissionSize - uDatagramHeaderSize;
         uSequenceNumber++;
