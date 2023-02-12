@@ -2,17 +2,21 @@
 
 // static const char *payload = "Message from ESP32 ";
 
-WifiModule::WifiModule(std::string sSSID, std::string sPassword, std::string sHostIPAddress, unsigned uUDPport, unsigned uDatagramSize,unsigned uBufferSize) :
+WifiModule::WifiModule(std::string sSSID, std::string sPassword, std::string sHostIPAddress, std::string strMode, unsigned uPort, unsigned uDatagramSize,unsigned uBufferSize) :
 BaseModule(uBufferSize),
 m_sSSID(sSSID),
 m_sPassword(sPassword),
 m_sHostIPAddress(sHostIPAddress),
-m_uUDPPort(uUDPport),
+m_strMode(strMode),
+m_uPort(uPort),
 m_uDatagramSize(uDatagramSize),
 m_uSessionNumber(0)
 {
+    // Connect to the WiFi
     ConnectWifiConnection();
+    // And then create either a UDP or TCP connection
     ConnectToSocket();
+    // Then Give some time for everything to settle
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 }
 
@@ -102,10 +106,18 @@ void WifiModule::ConnectToSocket()
 {
     m_dest_addr.sin_addr.s_addr = inet_addr(m_sHostIPAddress.c_str());
     m_dest_addr.sin_family = AF_INET;
-    m_dest_addr.sin_port = htons(m_uUDPPort);
+    m_dest_addr.sin_port = htons(m_uPort);
 
     int addr_family = AF_INET;
     int ip_protocol = IPPROTO_IP;
+
+    // Choose the IP layer type to use
+    if (m_strMode == "UDP")
+        ip_protocol = IPPROTO_UDP;
+    else if (m_strMode == "TCP")
+        ip_protocol = IPPROTO_TCP;
+    else
+        std::cout << std::string(__PRETTY_FUNCTION__) + ": WiFi mode not TCP or UDP, defaulting to IP \n";
 
     m_sock = socket(addr_family, SOCK_DGRAM, ip_protocol);
 }

@@ -49,11 +49,12 @@ public:
      * @param[in] m_sSSID SSID of WiFi network
      * @param[in] m_sPassword Password of WiFi network
      * @param[in] sHostIPAddress IP address of target device
-     * @param[in] uUDPport Port over which to stream
+     * @param[in] strMode WiFo Tx mode - "UDP" or "TCP"
+     * @param[in] uPort Port over which to stream
      * @param[in] uDatagramSize TX datagram size in bytes
      * @param[in] uBufferSize Size of input buffer
      */
-    WifiModule(std::string m_sSSID, std::string m_sPassword, std::string sHostIPAddress, unsigned uUDPport, unsigned uDatagramSize, unsigned uBufferSize);
+    WifiModule(std::string m_sSSID, std::string m_sPassword, std::string sHostIPAddress, std::string strMode, unsigned uPort, unsigned uDatagramSize, unsigned uBufferSize);
     //~WifiModule() = default;
 
     /**
@@ -69,11 +70,12 @@ private:
     std::string m_sSSID;            ///< SSID of WiFi network
     std::string m_sPassword;        ///< Password of WiFi network
     std::string m_sHostIPAddress;   ///< IP address of host
-    unsigned m_uUDPPort;            ///< UDP port that the ESP transmits to
+    std::string m_strMode;          ///< WiFi Mode - "UDP" or "TCP"
+    unsigned m_uPort;             ///< UDP port that the ESP transmits to
     int m_sock;                     ///< ESP Wifi Socket
     sockaddr_in m_dest_addr;        ///> Destination IP address
     unsigned m_uDatagramSize;       ///> Datagram transmission size in bytes
-    unsigned m_uSessionNumber; 
+    unsigned m_uSessionNumber;      ///> Datagram number
 
     /**
      * @brief Transmit message using UDP to webserver
