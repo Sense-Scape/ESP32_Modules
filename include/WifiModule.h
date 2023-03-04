@@ -29,6 +29,10 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 
+#include <pthread.h>
+#include <sched.h>
+
+
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 #define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_PSK

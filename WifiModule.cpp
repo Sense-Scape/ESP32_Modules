@@ -1,5 +1,8 @@
 #include "WifiModule.h"
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
 // static const char *payload = "Message from ESP32 ";
 
 WifiModule::WifiModule(std::string sSSID, std::string sPassword, std::string sHostIPAddress, std::string strMode, unsigned uPort, unsigned uDatagramSize,unsigned uBufferSize) :
@@ -165,7 +168,7 @@ void WifiModule::SendUDP(std::shared_ptr<BaseChunk> pBaseChunk)
     unsigned uDatagramHeaderSize = 24; // NEEDS TO RESULT IN DATA WITH MULTIPLE OF 4 BYTES
     uint8_t uTransmissionState = 0;    // 0 - error 1 - active transmission 2 - complete
     unsigned uDataBytesTransmitted = 0;
-    unsigned uSessionNumber = m_uSessionNumber;
+    uint32_t uSessionNumber = m_uSessionNumber;
     unsigned uTransmissionSize = m_uDatagramSize;
     unsigned uMaxTranssionSize = m_uDatagramSize; // bytes
     uint32_t u32ChunkType = ChunkTypesUtility::toU32(pBaseChunk->GetChunkType());

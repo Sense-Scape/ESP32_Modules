@@ -12,7 +12,10 @@
 #include "TimeChunk.h"
 
 /* ESP32 Includes */
-#include "driver/i2s.h"
+#include "driver/i2s_pdm.h"
+
+#include <pthread.h>
+#include <sched.h>
 
 /**@brief Structure to encapsulate configuration of I2S pins*/
 struct I2SPinConfig
@@ -60,10 +63,10 @@ public:
 
 private:
     I2SModuleConfig m_sI2SModuleConfig;                         ///< I2SModuleConfig structure used to configure the IS2 module
-    i2s_config_t m_i2s_config_t;                ///< ESP32 I2S config structure
-    std::vector<i2s_pin_config_t> m_v_pin_config;
+    // i2s_config_t m_i2s_config_t;                ///< ESP32 I2S config structure
+    // std::vector<i2s_pin_config_t> m_v_pin_config;
     std::shared_ptr<TimeChunk> m_pTimeChunk;    ///< Pointer to member time data chunk
-    
+
     /**
      * @brief Creates and configures I2S sampling
     */
