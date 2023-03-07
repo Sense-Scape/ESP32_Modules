@@ -3,12 +3,9 @@
 # Min CMake version
 cmake_minimum_required(VERSION 3.20)
 
-# idf_component_register(REQUIRES 
-# 						esp_system
-# 						nvs_flash
-# 						wifi_provisioning
-# 						)				 
-
+# First list the sources that shall be compiled
+# Then Point CMake to the header files in the "include" directory
+# Following this set the ESP32 component dependancies of the project
 idf_component_register(SRCS "WifiModule.cpp"
 							"I2SModule.cpp"
 						INCLUDE_DIRS "./include"
