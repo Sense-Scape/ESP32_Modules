@@ -62,15 +62,14 @@ public:
     void ContinuouslyTryProcess() override;
 
 private:
-    I2SModuleConfig m_sI2SModuleConfig;                         ///< I2SModuleConfig structure used to configure the IS2 module
-    // i2s_config_t m_i2s_config_t;                ///< ESP32 I2S config structure
-    // std::vector<i2s_pin_config_t> m_v_pin_config;
+    I2SModuleConfig m_sI2SModuleConfig;         ///< I2SModuleConfig structure used to configure the IS2 module
+    i2s_chan_handle_t m_i2s_chan_handle_t;      ///< i2s channel object handle, the control unit of the i2s driver
     std::shared_ptr<TimeChunk> m_pTimeChunk;    ///< Pointer to member time data chunk
 
     /**
      * @brief Creates and configures I2S sampling
     */
-    void ConfigureI2S();
+    i2s_chan_handle_t ConfigureI2S();
 
     /**
      * @brief Initializes Time Chunk vectrs default values. Initializes according to number of ADCs and their channels
