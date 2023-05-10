@@ -47,6 +47,7 @@ void I2SModule::Process(std::shared_ptr<BaseChunk> pBaseChunk)
 
     size_t bytesRead = 0;
     static uint8_t buffer8[128*2*2];
+    
     int samplesRead = 0;
 
     std::unique_lock<std::mutex> ProcessLock(m_ProcessStateMutex);
@@ -54,15 +55,23 @@ void I2SModule::Process(std::shared_ptr<BaseChunk> pBaseChunk)
     while (!m_bShutDown)
     {
         ProcessLock.unlock();
-        ReinitializeTimeChunk();
         
+        // Comment: Do not actually have to do this ass data will be overwritten anyway
+        ReinitializeTimeChunk();
 
-        i2s_channel_read(m_i2s_chan_handle_t, &buffer8, (128*2)*2, &bytesRead, 1000);
+        ESP_ERROR_CHECK(i2s_channel_read(m_i2s_chan_handle_t, &buffer8, (128*2)*2, &bytesRead, 1000));
+        samplesRead = bytesRead/2;
+        
+        uint8_t* pbuffer8Chan1 = &buffer8[0];
+        uint8_t* pbuffer8Chan2 = &buffer8[2];
 
         for (int i = 0; i < samplesRead/2; i++) 
         {   
-            m_pTimeChunk->m_vvi16TimeChunks[0][i] = (buffer8[2*(2*i)] ) | (buffer8[2*(2*i) + 1 ] << 8); 
-            m_pTimeChunk->m_vvi16TimeChunks[1][i] = (buffer8[2*(2*i + 1)] ) | (buffer8[2*(2*i + 1) + 1] << 8 );  
+            m_pTimeChunk->m_vvi16TimeChunks[0][i] = (*pbuffer8Chan1) | ((*(pbuffer8Chan1+1)) << 8);
+            m_pTimeChunk->m_vvi16TimeChunks[1][i] = (*pbuffer8Chan2) | ((*(pbuffer8Chan2+1)) << 8);
+
+            pbuffer8Chan1 = pbuffer8Chan1+2;
+            pbuffer8Chan2 = pbuffer8Chan2+2;
         }
 
         // Passing data on
