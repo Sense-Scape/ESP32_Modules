@@ -5,6 +5,7 @@
 #include <cmath>
 #include <thread>
 #include <memory>
+#include <chrono>
 
 #include "BaseModule.h"
 #include "TimeChunk.h"
@@ -31,6 +32,7 @@
 
 #include <pthread.h>
 #include <sched.h>
+
 
 
 #define WIFI_CONNECTED_BIT BIT0
@@ -96,6 +98,16 @@ private:
      * @brief Connect Wifi module to socket
      */
     void ConnectToSocket();
+
+    /**
+     * @brief Connect Wifi module to socket
+     */
+    void ConnectTCPSocket();
+
+    /**
+     * @brief Connect Wifi module to socket
+     */
+    void ConnectUDPSocket();
 
     /**
      * @brief The loop process the Wifi module completes

@@ -5,15 +5,14 @@
 
 // static const char *payload = "Message from ESP32 ";
 
-WifiModule::WifiModule(std::string sSSID, std::string sPassword, std::string sHostIPAddress, std::string strMode, unsigned uPort, unsigned uDatagramSize,unsigned uBufferSize) :
-BaseModule(uBufferSize),
-m_sSSID(sSSID),
-m_sPassword(sPassword),
-m_sHostIPAddress(sHostIPAddress),
-m_strMode(strMode),
-m_uPort(uPort),
-m_uDatagramSize(uDatagramSize),
-m_uSessionNumber(0)
+WifiModule::WifiModule(std::string sSSID, std::string sPassword, std::string sHostIPAddress, std::string strMode, unsigned uPort, unsigned uDatagramSize, unsigned uBufferSize) : BaseModule(uBufferSize),
+                                                                                                                                                                                  m_sSSID(sSSID),
+                                                                                                                                                                                  m_sPassword(sPassword),
+                                                                                                                                                                                  m_sHostIPAddress(sHostIPAddress),
+                                                                                                                                                                                  m_strMode(strMode),
+                                                                                                                                                                                  m_uPort(uPort),
+                                                                                                                                                                                  m_uDatagramSize(uDatagramSize),
+                                                                                                                                                                                  m_uSessionNumber(0)
 {
     // Connect to the WiFi
     ConnectWifiConnection();
@@ -105,24 +104,58 @@ void WifiModule::ConnectWifiConnection()
         ESP_LOGE(m_TAG, "UNEXPECTED EVENT");
 }
 
-void WifiModule::ConnectToSocket()
+void WifiModule::ConnectTCPSocket()
 {
     m_dest_addr.sin_addr.s_addr = inet_addr(m_sHostIPAddress.c_str());
     m_dest_addr.sin_family = AF_INET;
     m_dest_addr.sin_port = htons(m_uPort);
+    m_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+    
+    // Internet address presentation to network address conversion - IPV4 v.s IPV6
+    inet_pton(AF_INET, m_sHostIPAddress.c_str(), &m_dest_addr.sin_addr.s_addr);
 
-    int addr_family = AF_INET;
-    int ip_protocol = IPPROTO_IP;
+    int optval = 1;
+    int optlen = sizeof(optval);
+    if (setsockopt(m_sock, SOL_SOCKET, SO_KEEPALIVE, (char *)&optval, optlen) < 0)
+        return;
 
-    // Choose the IP layer type to use
-    if (m_strMode == "UDP")
-        ip_protocol = IPPROTO_UDP;
-    else if (m_strMode == "TCP")
-        ip_protocol = IPPROTO_TCP;
+    // int buf_size = 4096 * 4; // set buffer size to 64KB
+    // setsockopt(m_sock, SOL_SOCKET, SO_SNDBUF, (char *)&buf_size, sizeof(buf_size));
+
+    if (connect(m_sock, (struct sockaddr *)&m_dest_addr, sizeof(m_dest_addr)) < 0)
+    {
+        ESP_LOGE(__func__, "Failed to connect to server: errno %d", errno);
+        close(m_sock);
+        return;
+    }
     else
-        std::cout << std::string(__PRETTY_FUNCTION__) + ": WiFi mode not TCP or UDP, defaulting to IP \n";
+        std::cout << std::string(__PRETTY_FUNCTION__) + ": Connected to TCP server on " + m_sHostIPAddress + ":" + std::to_string(m_uPort) + "\n";
+}
 
-    m_sock = socket(addr_family, SOCK_DGRAM, ip_protocol);
+void WifiModule::ConnectUDPSocket()
+{
+    // Lets start by setting up transmission protocol information
+    m_dest_addr.sin_addr.s_addr = inet_addr(m_sHostIPAddress.c_str());
+    m_dest_addr.sin_family = AF_INET;
+    m_dest_addr.sin_port = htons(m_uPort);
+
+    // And then create hte socket
+    m_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    std::cout << std::string(__PRETTY_FUNCTION__) + ": WiFi mode UDP\n";
+}
+
+void WifiModule::ConnectToSocket()
+{
+    // Lets first check what mode we are transmitting in
+    if (m_strMode == "UDP")
+        // and connect using UDP
+        ConnectUDPSocket();
+    else if (m_strMode == "TCP")
+        // Or TCP
+        ConnectTCPSocket();
+    else
+        // But lets default to UDP, just in case
+        ConnectUDPSocket();
 }
 
 void WifiModule::wifi_event_handler(void *arg, esp_event_base_t event_base,
@@ -157,67 +190,100 @@ void WifiModule::wifi_event_handler(void *arg, esp_event_base_t event_base,
 
 void WifiModule::SendUDP(std::shared_ptr<BaseChunk> pBaseChunk)
 {
-    // Serialising chunk to bytes
-    auto pvcByteData = pBaseChunk->Serialise();
-    
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     // Bytes to transmit is equal to number of bytes in derived object (e.g TimeChunk)
-    uint32_t dTransmittableBytes = pvcByteData->size();
-
-    // Transmission state vartiables - This is essentially TCP now
-    unsigned uSequenceNumber = 0; // sequence 0 indicated error, 1 is starting
-    unsigned uDatagramHeaderSize = 24; // NEEDS TO RESULT IN DATA WITH MULTIPLE OF 4 BYTES
-    uint8_t uTransmissionState = 0;    // 0 - error 1 - active transmission 2 - complete
-    unsigned uDataBytesTransmitted = 0;
-    uint32_t uSessionNumber = m_uSessionNumber;
-    unsigned uTransmissionSize = m_uDatagramSize;
-    unsigned uMaxTranssionSize = m_uDatagramSize; // bytes
+    auto pvcByteData = pBaseChunk->Serialise();
+    uint32_t u32TransmittableDataBytes = pvcByteData->size();
     uint32_t u32ChunkType = ChunkTypesUtility::toU32(pBaseChunk->GetChunkType());
-    bool bTransmit = true;
 
-    // Logic for transimission
+    // Intra-transmission state information
+    unsigned uDatagramHeaderSize = 24;      // NEEDS TO RESULT IN DATA WITH MULTIPLE OF 4 BYTES
+    uint16_t uSessionDataHeaderSize = 2;          // size of the footer in bytes. '\0' denotes finish if this structure
+    uint16_t uSessionTransmissionSize = m_uDatagramSize;
+    uint8_t uTransmissionState = 0;         // 0 - Transmitting; 1 - finished
+
+    // Inter-transmission state information
+    bool bTransmit = true;
+    unsigned uSequenceNumber = 0;           // sequence 0 indicated error, 1 is starting
+    unsigned uDataBytesTransmitted = 0;     // Current count of how many bytes have been transmitted
+    unsigned uDataBytesToTransmit = m_uDatagramSize - uSessionDataHeaderSize - uDatagramHeaderSize;
+    unsigned uMaxTransmissionSize = m_uDatagramSize; // Largest buffer size that can be request for transmission
+    uint32_t uSessionNumber = m_uSessionNumber;
+
+    // Now that we have configured meta data, lets start transmitting
     while (bTransmit)
     {
-        // If not enough bytes for a full transmission
-        if (uDataBytesTransmitted + uTransmissionSize - uDatagramHeaderSize> dTransmittableBytes)
+        // If our next transmission exceeds the number of data bytes available to be transmitted
+        if (uDataBytesTransmitted + uDataBytesToTransmit > u32TransmittableDataBytes)
         {
-            uTransmissionSize = dTransmittableBytes - uDataBytesTransmitted + uDatagramHeaderSize;
+            // Then adjust to how many data bytes shall be transmitted to the remaining number
+            uDataBytesToTransmit = u32TransmittableDataBytes - uDataBytesTransmitted;
+            uSessionTransmissionSize = uDataBytesToTransmit +  uDatagramHeaderSize + uSessionDataHeaderSize;
+            // And then inform process to finish up
             uTransmissionState = 1;
             bTransmit = false;
         }
-        else
-        {
-            uTransmissionSize = uMaxTranssionSize;
-        }
 
-        // UDP transmission state control
-        uint8_t auUDPData[uTransmissionSize] = {(uint8_t)0};
-        memcpy(&auUDPData[0], &uSequenceNumber, sizeof(uSequenceNumber)); // 4 bytes
-        memcpy(&auUDPData[4], &uTransmissionState, sizeof(uTransmissionState));
-        memcpy(&auUDPData[5], &uTransmissionSize, sizeof(uTransmissionSize));
-        memcpy(&auUDPData[9], &u32ChunkType, sizeof(u32ChunkType));
-        memcpy(&auUDPData[13], &uSessionNumber, sizeof(uSessionNumber));
+        // Lets first insert the header transmission state information into the bytes array
+        uint8_t auUDPData[uMaxTransmissionSize] = {(uint8_t)0};
+        memcpy(&auUDPData[0], &uSessionTransmissionSize, uSessionDataHeaderSize); 
+        memcpy(&auUDPData[0+uSessionDataHeaderSize], &uSequenceNumber, sizeof(uSequenceNumber)); // 4 bytes
+        memcpy(&auUDPData[4+uSessionDataHeaderSize], &uTransmissionState, sizeof(uTransmissionState));
+        memcpy(&auUDPData[5+uSessionDataHeaderSize], &uDataBytesToTransmit, sizeof(uDataBytesToTransmit));
+        memcpy(&auUDPData[9+uSessionDataHeaderSize], &u32ChunkType, sizeof(u32ChunkType));
+        memcpy(&auUDPData[13+uSessionDataHeaderSize], &uSessionNumber, sizeof(uSessionNumber));
 
-        //TODO: implement IP tx to uniquley identify device
+        // TODO: implement IP tx to uniquely identify device
 
-        // Actual Byte data to transmit
-        memcpy(&auUDPData[uDatagramHeaderSize], &((*pvcByteData)[uDataBytesTransmitted]), uTransmissionSize - uDatagramHeaderSize);
+        // Then lets insert the actual data byte data to transmit after the header
+        // While keeping in mind that we have to send unset bits from out data byte array
+        // { | DataHeaderSize | DatagramHeader | Data | }
+        memcpy(&auUDPData[uSessionDataHeaderSize + uDatagramHeaderSize], &((*pvcByteData)[uDataBytesTransmitted]), uDataBytesToTransmit);
 
+        // Then lets insert footer information after header and data
+        // so the receiver knows when this message is complete;
         const void *ptr_payload(&(auUDPData));
-        int err = sendto(m_sock, ptr_payload, uTransmissionSize, 0, (struct sockaddr *)&m_dest_addr, sizeof(m_dest_addr));
 
-        // Only print if there was a TX error
-        if (err < 0)
+        int err;
+        if (m_strMode == "UDP")
+            do
+            {
+                err = sendto(m_sock, ptr_payload, uSessionTransmissionSize, 0, (struct sockaddr *)&m_dest_addr, sizeof(m_dest_addr));
+                if (err != uSessionTransmissionSize)
+                {
+                    ESP_LOGE(m_TAG, "Error occurred during sending: errno %d - Retrying", errno);
+                }
+
+            } while (err != uSessionTransmissionSize); // if udp transmit did not end up in a memory issue
+        else
+            // Sen using TCP 
+            err = send(m_sock, ptr_payload, uSessionTransmissionSize, 0);
+
+        //  Only print if there was a TX error
+        if (err == 0)
         {
-            ESP_LOGE(m_TAG, "Error occurred during sending: errno %d ", errno);
-            if(errno == 118)
-                esp_restart(); //TODO: Complete proper handling of incorrect TX
+            // We have disconnected so lets try reconnect
+            ESP_LOGE(m_TAG, "Error occurred during sending: errno %d - Socket disconnect", errno);
+            ConnectToSocket();
         }
-           
-        // Updating transmission states
-        uDataBytesTransmitted = uDataBytesTransmitted + uTransmissionSize - uDatagramHeaderSize;
-        uSequenceNumber++;
-        
-    }
+        else if (err < 0)
+        {
+            // Otherwise it was some other error
+            ESP_LOGE(m_TAG, "Error occurred during sending: errno %d ", errno);
+            if (errno == 118)
+                esp_restart(); // TODO: Complete proper handling of incorrect TX
+        }
 
+        // Updating transmission states
+        uDataBytesTransmitted+=uDataBytesToTransmit;
+        uSequenceNumber++;
+    }
     m_uSessionNumber++;
+
+    //Print the elapsed time
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+    ESP_LOGI("APP_MAIN", "Time elapsed: %lld microseconds", duration.count());
 }
