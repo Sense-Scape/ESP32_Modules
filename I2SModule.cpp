@@ -22,7 +22,12 @@ i2s_chan_handle_t I2SModule::ConfigureI2S()
      * These two helper macros is defined in 'i2s_pdm.h' which can only be used in PDM RX mode.
      * They can help to specify the slot and clock configurations for initialization or re-configuring */
     i2s_pdm_rx_config_t pdm_rx_cfg = {
-        .clk_cfg = I2S_PDM_RX_CLK_DEFAULT_CONFIG(m_sI2SModuleConfig.m_uSampleRate),
+        .clk_cfg = {
+            .sample_rate_hz = m_sI2SModuleConfig.m_uSampleRate,
+            .clk_src = I2S_CLK_SRC_APLL,
+            .mclk_multiple = I2S_MCLK_MULTIPLE_256,
+            .dn_sample_mode = I2S_PDM_DSR_8S 
+        },//I2S_PDM_RX_CLK_DEFAULT_CONFIG(m_sI2SModuleConfig.m_uSampleRate),
         /* The data bit-width of PDM mode is fixed to 16 */
         .slot_cfg = I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
@@ -50,18 +55,19 @@ void I2SModule::Process(std::shared_ptr<BaseChunk> pBaseChunk)
     
     int samplesRead = 0;
 
-    std::unique_lock<std::mutex> ProcessLock(m_ProcessStateMutex);
-    
     while (!m_bShutDown)
     {
-        ProcessLock.unlock();
         
         // Comment: Do not actually have to do this ass data will be overwritten anyway
         ReinitializeTimeChunk();
 
         ESP_ERROR_CHECK(i2s_channel_read(m_i2s_chan_handle_t, &buffer8, (128*2)*2, &bytesRead, 1000));
+
+        // Update time as time since boot in microseconds
+        m_pTimeChunk->m_i64TimeStamp = esp_timer_get_time();
+
         samplesRead = bytesRead/2;
-        
+
         uint8_t* pbuffer8Chan1 = &buffer8[0];
         uint8_t* pbuffer8Chan2 = &buffer8[2];
 
@@ -79,23 +85,16 @@ void I2SModule::Process(std::shared_ptr<BaseChunk> pBaseChunk)
 
         if (!TryPassChunk(pTimeChunk))
             std::cout << std::string(__PRETTY_FUNCTION__) + ": Next buffer full, dropping current chunk and passing \n";
-        
-        ProcessLock.lock();
     }
 
 }
 
 void I2SModule::ContinuouslyTryProcess()
 {
-    std::unique_lock<std::mutex> ProcessLock(m_ProcessStateMutex);
-
     while (!m_bShutDown)
     {
-        ProcessLock.unlock();
         auto pBaseChunk = std::make_shared<BaseChunk>();
         Process(pBaseChunk);
-
-        ProcessLock.lock();
     }
 }
 

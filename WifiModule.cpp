@@ -3,8 +3,6 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-// static const char *payload = "Message from ESP32 ";
-
 WifiModule::WifiModule(std::string sSSID, std::string sPassword, std::string sHostIPAddress, std::string strMode, unsigned uPort, unsigned uDatagramSize, unsigned uBufferSize) : BaseModule(uBufferSize),
                                                                                                                                                                                   m_sSSID(sSSID),
                                                                                                                                                                                   m_sPassword(sPassword),
@@ -119,8 +117,12 @@ void WifiModule::ConnectTCPSocket()
     if (setsockopt(m_sock, SOL_SOCKET, SO_KEEPALIVE, (char *)&optval, optlen) < 0)
         return;
 
-    // int buf_size = 4096 * 4; // set buffer size to 64KB
-    // setsockopt(m_sock, SOL_SOCKET, SO_SNDBUF, (char *)&buf_size, sizeof(buf_size));
+     // Disable Nagle's algorithm (TCP_NODELAY)
+    int flag = 1;
+    if (setsockopt(m_sock, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(int)) == -1) {
+        std::cerr << "Failed to set TCP_NODELAY option." << std::endl;
+        return;
+    }
 
     if (connect(m_sock, (struct sockaddr *)&m_dest_addr, sizeof(m_dest_addr)) < 0)
     {
@@ -190,14 +192,11 @@ void WifiModule::wifi_event_handler(void *arg, esp_event_base_t event_base,
 
 void WifiModule::SendUDP(std::shared_ptr<BaseChunk> pBaseChunk)
 {
-
-    auto start_time = std::chrono::high_resolution_clock::now();
-
     // Bytes to transmit is equal to number of bytes in derived object (e.g TimeChunk)
     auto pvcByteData = pBaseChunk->Serialise();
     uint32_t u32TransmittableDataBytes = pvcByteData->size();
-    uint32_t u32ChunkType = ChunkTypesUtility::toU32(pBaseChunk->GetChunkType());
-
+    uint32_t u32ChunkType = ChunkTypesUtility::ToU32(pBaseChunk->GetChunkType());
+ 
     // Intra-transmission state information
     unsigned uDatagramHeaderSize = 24;      // NEEDS TO RESULT IN DATA WITH MULTIPLE OF 4 BYTES
     uint16_t uSessionDataHeaderSize = 2;          // size of the footer in bytes. '\0' denotes finish if this structure
@@ -281,9 +280,4 @@ void WifiModule::SendUDP(std::shared_ptr<BaseChunk> pBaseChunk)
         uSequenceNumber++;
     }
     m_uSessionNumber++;
-
-    //Print the elapsed time
-    auto end_time = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
-    ESP_LOGI("APP_MAIN", "Time elapsed: %lld microseconds", duration.count());
 }

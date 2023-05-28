@@ -13,6 +13,7 @@
 
 /* ESP32 Includes */
 #include "driver/i2s_pdm.h"
+#include "esp_timer.h"
 
 #include <pthread.h>
 #include <sched.h>
