@@ -193,7 +193,8 @@ void WifiModule::wifi_event_handler(void *arg, esp_event_base_t event_base,
 void WifiModule::SendUDP(std::shared_ptr<BaseChunk> pBaseChunk)
 {
     // Bytes to transmit is equal to number of bytes in derived object (e.g TimeChunk)
-    auto pvcByteData = pBaseChunk->Serialise();
+    auto a = static_cast<TimeChunk&>(*pBaseChunk);
+    auto pvcByteData = a.Serialise();
     uint32_t u32TransmittableDataBytes = pvcByteData->size();
     uint32_t u32ChunkType = ChunkTypesUtility::ToU32(pBaseChunk->GetChunkType());
  
@@ -261,18 +262,22 @@ void WifiModule::SendUDP(std::shared_ptr<BaseChunk> pBaseChunk)
             err = send(m_sock, ptr_payload, uSessionTransmissionSize, 0);
 
         //  Only print if there was a TX error
-        if (err == 0)
-        {
-            // We have disconnected so lets try reconnect
-            ESP_LOGE(m_TAG, "Error occurred during sending: errno %d - Socket disconnect", errno);
-            ConnectToSocket();
-        }
-        else if (err < 0)
+        // if (err == 128)
+        // {
+        //     // We have disconnected so lets try reconnect
+        //     ESP_LOGE(m_TAG, "Error occurred during sending: errno %d - Socket disconnect", errno);
+        //     ConnectToSocket();
+        // }
+        // else if 
+        if (err < 0)
         {
             // Otherwise it was some other error
             ESP_LOGE(m_TAG, "Error occurred during sending: errno %d ", errno);
             if (errno == 118)
                 esp_restart(); // TODO: Complete proper handling of incorrect TX
+            else if (errno == 128)
+                ConnectToSocket();
+            
         }
 
         // Updating transmission states
